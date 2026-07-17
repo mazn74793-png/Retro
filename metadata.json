@@ -1,0 +1,6 @@
+{
+  "name": "RETRO EG",
+  "description": "Premium retro streetwear e-commerce platform for RETRO EG brand, featuring elegant clothing exhibitions, order logs, localized payment checkouts, and active order logistics trackers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
