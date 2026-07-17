@@ -301,18 +301,36 @@ const SEED_ORDERS = [
 ];
 
 // Helper to check and bootstrap JSON databases
+// In-memory runtime backups to handle read-only/serverless environments gracefully
+let memoryProducts = [...INITIAL_PRODUCTS];
+let memoryOrders = [...SEED_ORDERS];
+
 function initDatabase() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+      try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      } catch (_) {}
     }
 
-    if (!fs.existsSync(PRODUCTS_FILE)) {
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+      const products = JSON.parse(rawData);
+      if (Array.isArray(products) && products.length > 0) {
+        memoryProducts = products;
+      }
+    } else {
       safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(INITIAL_PRODUCTS, null, 2));
       console.log("Initialized products database file.");
     }
 
-    if (!fs.existsSync(ORDERS_FILE)) {
+    if (fs.existsSync(ORDERS_FILE)) {
+      const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
+      const orders = JSON.parse(rawData);
+      if (Array.isArray(orders)) {
+        memoryOrders = orders;
+      }
+    } else {
       safeWriteFileSync(ORDERS_FILE, JSON.stringify(SEED_ORDERS, null, 2));
       console.log("Initialized orders database file.");
     }
@@ -324,37 +342,42 @@ function initDatabase() {
 initDatabase();
 
 // DATABASE API ROUTES
+// Support dual paths (/api/something and /something) for Vercel prefix stripping
 // 1. Get all products
-app.get("/api/products", (req, res) => {
+app.get(["/api/products", "/products"], (req, res) => {
   try {
     if (fs.existsSync(PRODUCTS_FILE)) {
       const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
       const products = JSON.parse(rawData);
-      return res.json(Array.isArray(products) && products.length > 0 ? products : INITIAL_PRODUCTS);
+      if (Array.isArray(products) && products.length > 0) {
+        memoryProducts = products;
+      }
     }
-    return res.json(INITIAL_PRODUCTS);
+    return res.json(memoryProducts);
   } catch (error) {
-    console.warn("Using INITIAL_PRODUCTS fallback due to read error:", error);
-    return res.json(INITIAL_PRODUCTS);
+    console.warn("Using memoryProducts fallback due to read error:", error);
+    return res.json(memoryProducts);
   }
 });
 
 // 2. Add new product (Admin)
-app.post("/api/products", (req, res) => {
+app.post(["/api/products", "/products"], (req, res) => {
   try {
     const newProduct = req.body;
-    let products = [...INITIAL_PRODUCTS];
-    try {
-      if (fs.existsSync(PRODUCTS_FILE)) {
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      try {
         const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
-        products = JSON.parse(rawData);
-      }
-    } catch (_) {}
+        const products = JSON.parse(rawData);
+        if (Array.isArray(products)) {
+          memoryProducts = products;
+        }
+      } catch (_) {}
+    }
     
     // Add to start of list
-    products.unshift(newProduct);
+    memoryProducts.unshift(newProduct);
     
-    safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
+    safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(memoryProducts, null, 2));
     res.status(201).json(newProduct);
   } catch (error) {
     res.status(500).json({ error: "Failed to save product" });
@@ -362,56 +385,69 @@ app.post("/api/products", (req, res) => {
 });
 
 // 3. Update product details (Admin edit price or toggle stock)
-app.patch("/api/products/:id", (req, res) => {
+app.patch(["/api/products/:id", "/products/:id"], (req, res) => {
   try {
     const { id } = req.params;
     const { price, inStock } = req.body;
-    let products = [...INITIAL_PRODUCTS];
-    try {
-      if (fs.existsSync(PRODUCTS_FILE)) {
-        const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
-        products = JSON.parse(rawData);
-      }
-    } catch (_) {}
     
-    const index = products.findIndex((p: any) => p.id === id);
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      try {
+        const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+        const products = JSON.parse(rawData);
+        if (Array.isArray(products)) {
+          memoryProducts = products;
+        }
+      } catch (_) {}
+    }
+    
+    const index = memoryProducts.findIndex((p: any) => p.id === id);
     if (index === -1) {
       return res.status(404).json({ error: "Product not found" });
     }
     
-    if (price !== undefined) products[index].price = Number(price);
-    if (inStock !== undefined) products[index].inStock = Boolean(inStock);
+    if (price !== undefined) memoryProducts[index].price = Number(price);
+    if (inStock !== undefined) memoryProducts[index].inStock = Boolean(inStock);
     
-    safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
-    res.json(products[index]);
+    safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(memoryProducts, null, 2));
+    res.json(memoryProducts[index]);
   } catch (error) {
     res.status(500).json({ error: "Failed to update product" });
   }
 });
 
 // 4. Get all orders
-app.get("/api/orders", (req, res) => {
+app.get(["/api/orders", "/orders"], (req, res) => {
   try {
     if (fs.existsSync(ORDERS_FILE)) {
       const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
       const orders = JSON.parse(rawData);
-      return res.json(Array.isArray(orders) ? orders : SEED_ORDERS);
+      if (Array.isArray(orders)) {
+        memoryOrders = orders;
+      }
     }
-    return res.json(SEED_ORDERS);
+    return res.json(memoryOrders);
   } catch (error) {
-    console.warn("Using SEED_ORDERS fallback due to read error:", error);
-    return res.json(SEED_ORDERS);
+    console.warn("Using memoryOrders fallback due to read error:", error);
+    return res.json(memoryOrders);
   }
 });
 
 // 5. Get single order by tracking ID
-app.get("/api/orders/:id", (req, res) => {
+app.get(["/api/orders/:id", "/orders/:id"], (req, res) => {
   try {
     const { id } = req.params;
-    const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
-    const orders = JSON.parse(rawData);
     
-    const order = orders.find((o: any) => o.id === id.trim().toUpperCase());
+    if (fs.existsSync(ORDERS_FILE)) {
+      try {
+        const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
+        const orders = JSON.parse(rawData);
+        if (Array.isArray(orders)) {
+          memoryOrders = orders;
+        }
+      } catch (_) {}
+    }
+    
+    const order = memoryOrders.find((o: any) => o.id === id.trim().toUpperCase());
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
@@ -422,16 +458,24 @@ app.get("/api/orders/:id", (req, res) => {
 });
 
 // 6. Place new order
-app.post("/api/orders", (req, res) => {
+app.post(["/api/orders", "/orders"], (req, res) => {
   try {
     const newOrder = req.body;
-    const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
-    const orders = JSON.parse(rawData);
+    
+    if (fs.existsSync(ORDERS_FILE)) {
+      try {
+        const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
+        const orders = JSON.parse(rawData);
+        if (Array.isArray(orders)) {
+          memoryOrders = orders;
+        }
+      } catch (_) {}
+    }
     
     // Add to start of list
-    orders.unshift(newOrder);
+    memoryOrders.unshift(newOrder);
     
-    safeWriteFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+    safeWriteFileSync(ORDERS_FILE, JSON.stringify(memoryOrders, null, 2));
     res.status(201).json(newOrder);
   } catch (error) {
     res.status(500).json({ error: "Failed to place order" });
@@ -439,20 +483,27 @@ app.post("/api/orders", (req, res) => {
 });
 
 // 7. Update order status and log timeline step (Admin)
-app.patch("/api/orders/:id/status", (req, res) => {
+app.patch(["/api/orders/:id/status", "/orders/:id/status"], (req, res) => {
   try {
     const { id } = req.params;
     const { status, nextStatus, newStep } = req.body; // status: exact state, newStep: complete details
     
-    const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
-    const orders = JSON.parse(rawData);
+    if (fs.existsSync(ORDERS_FILE)) {
+      try {
+        const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
+        const orders = JSON.parse(rawData);
+        if (Array.isArray(orders)) {
+          memoryOrders = orders;
+        }
+      } catch (_) {}
+    }
     
-    const index = orders.findIndex((o: any) => o.id === id);
+    const index = memoryOrders.findIndex((o: any) => o.id === id);
     if (index === -1) {
       return res.status(404).json({ error: "Order not found" });
     }
     
-    const order = orders[index];
+    const order = memoryOrders[index];
     const updatedHistory = [...order.trackingHistory];
     
     // Status transitions
@@ -473,9 +524,9 @@ app.patch("/api/orders/:id/status", (req, res) => {
     order.status = nextStatus;
     order.trackingHistory = remadeHistory;
     
-    orders[index] = order;
+    memoryOrders[index] = order;
     
-    safeWriteFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+    safeWriteFileSync(ORDERS_FILE, JSON.stringify(memoryOrders, null, 2));
     res.json(order);
   } catch (error) {
     res.status(500).json({ error: "Failed to update order status" });
@@ -483,7 +534,7 @@ app.patch("/api/orders/:id/status", (req, res) => {
 });
 
 // Real-time AI Styling & Logistics Assistant Route
-app.post("/api/ai/chat", async (req, res) => {
+app.post(["/api/ai/chat", "/ai/chat"], async (req, res) => {
   try {
     const { message, history } = req.body;
     if (!message) {
