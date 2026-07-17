@@ -621,7 +621,7 @@ Here is your detailed product and operational knowledge:
 `;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: contents,
       config: {
         systemInstruction: systemInstruction,
