@@ -76,10 +76,10 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   // Lookbook slides state for premium street-style Hero section
   const [lookbookIndex, setLookbookIndex] = useState(0);
   const lookbookSlides = [
-    { src: '/src/assets/images/retro_hoodie_1784140861378.jpg', label: '01 / THE COSMIC HOODIE', labelAr: '٠١ / هودي ريترو كوزميك' },
-    { src: '/src/assets/images/retro_tee_1784140871626.jpg', label: '02 / ACID-WASH TEE', labelAr: '٠٢ / تيشرت أسيد واش' },
-    { src: '/src/assets/images/retro_cargo_1784140882129.jpg', label: '03 / UTILITY CARGO PANTS', labelAr: '٠٣ / كارجو تيك-ريترو' },
-    { src: '/src/assets/images/retro_jacket_1784140892340.jpg', label: '04 / WINDBREAKER JACKET', labelAr: '٠٤ / جاكيت بومبر' },
+    { src: '/images/retro_hoodie_1784140861378.jpg', label: '01 / THE COSMIC HOODIE', labelAr: '٠١ / هودي ريترو كوزميك' },
+    { src: '/images/retro_tee_1784140871626.jpg', label: '02 / ACID-WASH TEE', labelAr: '٠٢ / تيشرت أسيد واش' },
+    { src: '/images/retro_cargo_1784140882129.jpg', label: '03 / UTILITY CARGO PANTS', labelAr: '٠٣ / كارجو تيك-ريترو' },
+    { src: '/images/retro_jacket_1784140892340.jpg', label: '04 / WINDBREAKER JACKET', labelAr: '٠٤ / جاكيت بومبر' },
   ];
 
   // Auto-sliding Lookbook Slides Timer

@@ -54,7 +54,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newProdDescAr, setNewProdDescAr] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('Hoodies');
-  const [newProdImage, setNewProdImage] = useState('/src/assets/images/retro_hoodie_1784140861378.jpg'); // default helper
+  const [newProdImage, setNewProdImage] = useState('/images/retro_hoodie_1784140861378.jpg'); // default helper
   const [formSuccess, setFormSuccess] = useState(false);
 
   // Price Edit State
@@ -738,10 +738,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) => setNewProdImage(e.target.value)}
                     className="w-full border border-zinc-200 rounded-xl px-3 py-2.5 text-xs bg-white focus:outline-none"
                   >
-                    <option value="/src/assets/images/retro_hoodie_1784140861378.jpg">Retro Hoodie Template</option>
-                    <option value="/src/assets/images/retro_tee_1784140871626.jpg">Retro Tee Template</option>
-                    <option value="/src/assets/images/retro_cargo_1784140882129.jpg">Retro Cargo Template</option>
-                    <option value="/src/assets/images/retro_jacket_1784140892340.jpg">Retro Jacket Template</option>
+                    <option value="/images/retro_hoodie_1784140861378.jpg">Retro Hoodie Template</option>
+                    <option value="/images/retro_tee_1784140871626.jpg">Retro Tee Template</option>
+                    <option value="/images/retro_cargo_1784140882129.jpg">Retro Cargo Template</option>
+                    <option value="/images/retro_jacket_1784140892340.jpg">Retro Jacket Template</option>
                   </select>
                 </div>
 

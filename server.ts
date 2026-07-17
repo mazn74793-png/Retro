@@ -50,7 +50,7 @@ const INITIAL_PRODUCTS = [
     descriptionAr: "هودي أوفرسايز من القطن الثقيل الممتاز مع مطبوعات ريترو كوزميك الفلكية والنجوم. مصنوع من فليس ناعم 400 جرام لكل متر مربع ليوفر أقصى درجات الراحة والمظهر المنظم لملابس الشارع.",
     price: 1250,
     originalPrice: 1650,
-    image: "/src/assets/images/retro_hoodie_1784140861378.jpg",
+    image: "/images/retro_hoodie_1784140861378.jpg",
     category: "Hoodies",
     categoryAr: "هوديز",
     sizes: ["M", "L", "XL", "XXL"],
@@ -85,7 +85,7 @@ const INITIAL_PRODUCTS = [
     descriptionAr: "تيشرت أوفرسايز ثقيل بمطبعة أوربت الفلكية المستوحاة من التسعينات. يتميز بغسيل أسيد معدني عتيق لمظهر ملابس الشارع الكلاسيكي الأصيل.",
     price: 650,
     originalPrice: 850,
-    image: "/src/assets/images/retro_tee_1784140871626.jpg",
+    image: "/images/retro_tee_1784140871626.jpg",
     category: "T-Shirts",
     categoryAr: "تيشرتات",
     sizes: ["M", "L", "XL", "XXL"],
@@ -119,7 +119,7 @@ const INITIAL_PRODUCTS = [
     descriptionAr: "بنطلون كارجو عملي بقصة واسعة ومريحة متميز بخياطة متباينة باللون الأبيض، وجيوب تكتيكية ثلاثية الأبعاد، وأربطة كاحل قابلة للتعديل للتبديل بين القصة الواسعة والضيقة.",
     price: 1100,
     originalPrice: 1450,
-    image: "/src/assets/images/retro_cargo_1784140882129.jpg",
+    image: "/images/retro_cargo_1784140882129.jpg",
     category: "Pants",
     categoryAr: "بناطيل",
     sizes: ["M", "L", "XL", "XXL"],
@@ -154,7 +154,7 @@ const INITIAL_PRODUCTS = [
     descriptionAr: "جاكيت ويندبريكر نايلون كلاسيكي بتصميم مستقبلي رائع يتميز بألواح ملونة أوفرسايز مميزة، وياقة عملية بسحاب كامل، وبطانة طاردة للمياه.",
     price: 1450,
     originalPrice: 1950,
-    image: "/src/assets/images/retro_jacket_1784140892340.jpg",
+    image: "/images/retro_jacket_1784140892340.jpg",
     category: "Jackets",
     categoryAr: "جاكيتات",
     sizes: ["M", "L", "XL", "XXL"],
@@ -201,7 +201,7 @@ const SEED_ORDERS = [
         colorNameAr: "أسود كربوني",
         price: 1250,
         quantity: 1,
-        image: "/src/assets/images/retro_hoodie_1784140861378.jpg",
+        image: "/images/retro_hoodie_1784140861378.jpg",
       }
     ],
     totalAmount: 1300,
@@ -260,7 +260,7 @@ const SEED_ORDERS = [
         colorNameAr: "أخضر زيتي",
         price: 1100,
         quantity: 1,
-        image: "/src/assets/images/retro_cargo_1784140882129.jpg",
+        image: "/images/retro_cargo_1784140882129.jpg",
       }
     ],
     totalAmount: 1175,
@@ -327,11 +327,15 @@ initDatabase();
 // 1. Get all products
 app.get("/api/products", (req, res) => {
   try {
-    const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
-    const products = JSON.parse(rawData);
-    res.json(products);
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+      const products = JSON.parse(rawData);
+      return res.json(Array.isArray(products) && products.length > 0 ? products : INITIAL_PRODUCTS);
+    }
+    return res.json(INITIAL_PRODUCTS);
   } catch (error) {
-    res.status(500).json({ error: "Failed to read products database" });
+    console.warn("Using INITIAL_PRODUCTS fallback due to read error:", error);
+    return res.json(INITIAL_PRODUCTS);
   }
 });
 
@@ -339,8 +343,13 @@ app.get("/api/products", (req, res) => {
 app.post("/api/products", (req, res) => {
   try {
     const newProduct = req.body;
-    const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
-    const products = JSON.parse(rawData);
+    let products = [...INITIAL_PRODUCTS];
+    try {
+      if (fs.existsSync(PRODUCTS_FILE)) {
+        const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+        products = JSON.parse(rawData);
+      }
+    } catch (_) {}
     
     // Add to start of list
     products.unshift(newProduct);
@@ -357,8 +366,13 @@ app.patch("/api/products/:id", (req, res) => {
   try {
     const { id } = req.params;
     const { price, inStock } = req.body;
-    const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
-    const products = JSON.parse(rawData);
+    let products = [...INITIAL_PRODUCTS];
+    try {
+      if (fs.existsSync(PRODUCTS_FILE)) {
+        const rawData = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+        products = JSON.parse(rawData);
+      }
+    } catch (_) {}
     
     const index = products.findIndex((p: any) => p.id === id);
     if (index === -1) {
@@ -378,11 +392,15 @@ app.patch("/api/products/:id", (req, res) => {
 // 4. Get all orders
 app.get("/api/orders", (req, res) => {
   try {
-    const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
-    const orders = JSON.parse(rawData);
-    res.json(orders);
+    if (fs.existsSync(ORDERS_FILE)) {
+      const rawData = fs.readFileSync(ORDERS_FILE, "utf-8");
+      const orders = JSON.parse(rawData);
+      return res.json(Array.isArray(orders) ? orders : SEED_ORDERS);
+    }
+    return res.json(SEED_ORDERS);
   } catch (error) {
-    res.status(500).json({ error: "Failed to read orders database" });
+    console.warn("Using SEED_ORDERS fallback due to read error:", error);
+    return res.json(SEED_ORDERS);
   }
 });
 
