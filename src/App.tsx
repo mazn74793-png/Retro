@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { ProductCatalog } from './components/ProductCatalog';
 import { CartDrawer } from './components/CartDrawer';
@@ -25,10 +25,13 @@ export default function App() {
   
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [adminClicks, setAdminClicks] = useState(0);
 
   // AI Assistant Chatbot state (Optional, beautiful addition for modern high-fashion shop)
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [aiMessage, setAiMessage] = useState('');
+  const [isAiTyping, setIsAiTyping] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const [aiChat, setAiChat] = useState<{ role: 'user' | 'assistant'; text: string }[]>([
     {
       role: 'assistant',
@@ -37,6 +40,12 @@ export default function App() {
         : 'Welcome to RETRO! I am your street-style styling advisor. Ask me anything about sizing, fabric weight, or tracking.'
     }
   ]);
+
+  useEffect(() => {
+    if (isAiOpen) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [aiChat, isAiTyping, isAiOpen]);
 
   // Load state from backend database API on init
   useEffect(() => {
@@ -193,41 +202,99 @@ export default function App() {
     setCurrentView('shop');
   };
 
-  // MOCK AI STYLING CHATBOT REPLIES
+  // Helper to detect if a string contains Arabic characters
+  const isMessageArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
+
+  // Helper to render formatted text with paragraphs and list items beautifully
+  const renderFormattedText = (text: string) => {
+    return text.split('\n').map((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) {
+        return (
+          <li key={index} className="list-disc list-inside ml-2 mt-1 first:mt-0 leading-relaxed font-sans text-[11.5px] opacity-95">
+            {trimmed.replace(/^[-•*]\s*/, '')}
+          </li>
+        );
+      }
+      if (trimmed === '') return <div key={index} className="h-1.5" />;
+      return <p key={index} className="leading-relaxed mb-1 last:mb-0 text-[11.5px] font-sans opacity-95">{line}</p>;
+    });
+  };
+
+  // Click handler for quick-suggestions
+  const handleQuickSuggest = (question: string) => {
+    if (isAiTyping) return;
+    const updatedChat = [...aiChat, { role: 'user' as const, text: question }];
+    setAiChat(updatedChat);
+    setIsAiTyping(true);
+
+    fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: question,
+        history: aiChat
+      })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('API server error');
+        return res.json();
+      })
+      .then((data) => {
+        setAiChat((prev) => [...prev, { role: 'assistant', text: data.text }]);
+      })
+      .catch((err) => {
+        console.error('Error contacting Gemini styling bot:', err);
+        const errorText = language === 'ar'
+          ? 'عذراً، واجهت مشكلة صغيرة في الاتصال بمساعد ريترو الذكي. حاول مجدداً يا غالي!'
+          : "Oops! Sourcing from the cloud is a bit slow. Let's try that again, fam!";
+        setAiChat((prev) => [...prev, { role: 'assistant', text: errorText }]);
+      })
+      .finally(() => {
+        setIsAiTyping(false);
+      });
+  };
+
+  // REAL AI STYLING CHATBOT REPLIES CALLING GEMINI BACKEND
   const handleSendAiMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!aiMessage.trim()) return;
+    if (!aiMessage.trim() || isAiTyping) return;
 
     const userMsg = aiMessage.trim();
     const updatedChat = [...aiChat, { role: 'user' as const, text: userMsg }];
     setAiChat(updatedChat);
     setAiMessage('');
+    setIsAiTyping(true);
 
-    // Formulate a beautiful streetwear styled reply matching Retro EG brand
-    setTimeout(() => {
-      let response = '';
-      const lowercaseMsg = userMsg.toLowerCase();
-
-      if (lowercaseMsg.includes('مقاس') || lowercaseMsg.includes('size') || lowercaseMsg.includes('سعر')) {
-        response = language === 'ar'
-          ? 'المقاسات لدينا أوفرسايز (Oversized) لتمنحك الراحة والمظهر العصري. للوزن من ٥٥-٧٠ كجم نوصي بـ M، ولـ ٧٠-٨٥ كجم بـ L، ولـ ٨٥-١٠٠ كجم بـ XL، وأكثر من ١٠٠ كجم بـ XXL. الأسعار معروضة بكل قطعة وتبدأ من ٦٥٠ جنيه مصري!'
-          : 'Our clothing fits are Oversized boxy for a premium drape. M fits 55-70kg, L fits 70-85kg, XL fits 85-100kg, XXL fits 100-120kg. Retail prices start from 650 EGP!';
-      } else if (lowercaseMsg.includes('توصيل') || lowercaseMsg.includes('شحن') || lowercaseMsg.includes('delivery')) {
-        response = language === 'ar'
-          ? 'الشحن يستغرق ٢-٣ أيام عمل للقاهرة والجيزة (تكلفة ٥٠ ج.م)، و٣-٤ أيام عمل للإسكندرية والمحافظات الأخرى. يمكنك متابعة خط سير المندوب في صفحة التتبع بالرقم الخاص بك!'
-          : 'Delivery takes 2-3 business days in Cairo/Giza (50 EGP), and 3-4 days to Alexandria and Delta region. Paste your tracking code on our Order Logistics screen for live updates.';
-      } else if (lowercaseMsg.includes('خامة') || lowercaseMsg.includes('قطن') || lowercaseMsg.includes('fabric') || lowercaseMsg.includes('cotton')) {
-        response = language === 'ar'
-          ? 'نحن نستخدم أجود أنواع القطن المصري الممتاز ذو الوزن الثقيل (Heavyweight) مثل الفرينش تيري ٤٠٠ جرام للهوديز والسينجل جيرسي ٢٦٠ جرام للتيشرتات. جميع القطع معالجة ضد الانكماش.'
-          : 'We utilize ultra-premium Egyptian cotton (400 GSM brushed fleece for hoodies and 260 GSM single jersey for tees). Pre-shrunk and built to last.';
-      } else {
-        response = language === 'ar'
-          ? 'رائع! ملابس ريترو صممت خصيصاً لتكسر جميع قواعد الموضة التقليدية. هل تود أن أساعدك في اختيار مقاس قطعة معينة أو إتمام الدفع؟'
-          : 'Awesome choice! Retro garments are designed to break traditional fashion boundaries. Need help selecting sizes or understanding our Vodafone Cash checkout process?';
-      }
-
-      setAiChat((prev) => [...prev, { role: 'assistant', text: response }]);
-    }, 1000);
+    fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: userMsg,
+        history: aiChat
+      })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('API server error');
+        return res.json();
+      })
+      .then((data) => {
+        setAiChat((prev) => [...prev, { role: 'assistant', text: data.text }]);
+      })
+      .catch((err) => {
+        console.error('Error contacting Gemini styling bot:', err);
+        const errorText = language === 'ar'
+          ? 'عذراً، واجهت مشكلة صغيرة في الاتصال بمساعد ريترو الذكي. حاول مجدداً يا غالي!'
+          : "Oops! Sourcing from the cloud is a bit slow. Let's try that again, fam!";
+        setAiChat((prev) => [...prev, { role: 'assistant', text: errorText }]);
+      })
+      .finally(() => {
+        setIsAiTyping(false);
+      });
   };
 
   const isAr = language === 'ar';
@@ -255,6 +322,7 @@ export default function App() {
             products={products}
             language={language}
             onAddToCart={handleAddToCart}
+            onPlaceOrder={handlePlaceOrder}
           />
         )}
 
@@ -294,7 +362,21 @@ export default function App() {
           <div className="flex justify-center gap-4 text-[11px] text-zinc-400 font-mono">
             <a href="https://instagram.com/retro__eg1" target="_blank" rel="noreferrer" className="hover:text-black transition-colors">@retro__eg1</a>
             <span>•</span>
-            <span>{isAr ? 'صنع في مصر بكل فخر' : 'Proudly Made in Egypt'}</span>
+            <span 
+              className="select-none cursor-default"
+              onClick={() => {
+                setAdminClicks(prev => {
+                  const newClicks = prev + 1;
+                  if (newClicks >= 5) {
+                    setCurrentView('admin');
+                    return 0;
+                  }
+                  return newClicks;
+                });
+              }}
+            >
+              {isAr ? 'صنع في مصر بكل فخر' : 'Proudly Made in Egypt'}
+            </span>
           </div>
         </div>
       </footer>
@@ -314,56 +396,146 @@ export default function App() {
       <div className="fixed bottom-6 left-6 z-30" id="ai-chat-bubble">
         <button
           onClick={() => setIsAiOpen(!isAiOpen)}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-2xl hover:scale-105 active:scale-95 transition-all"
+          className="relative flex h-14 w-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-2xl hover:scale-105 active:scale-95 hover:bg-zinc-900 transition-all focus:outline-none ring-4 ring-zinc-950/10"
           title={isAr ? 'مستشار الموضة ريترو' : 'Styling Assistant'}
         >
           {isAiOpen ? (
             <span className="text-sm font-extrabold font-mono">X</span>
           ) : (
-            <MessageSquare className="h-6 w-6" />
+            <>
+              <MessageSquare className="h-5 w-5" />
+              <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[8px] font-black items-center justify-center text-white">AI</span>
+              </span>
+            </>
           )}
         </button>
 
         {isAiOpen && (
-          <div className="absolute bottom-16 left-0 w-80 bg-white rounded-2xl shadow-2xl border border-zinc-200 overflow-hidden flex flex-col h-96 animate-slideIn">
+          <div className="absolute bottom-16 left-0 w-[310px] sm:w-[380px] bg-white rounded-2xl shadow-2xl border border-zinc-200/80 overflow-hidden flex flex-col h-[480px] sm:h-[520px] animate-slideIn transition-all">
             {/* Header */}
             <div className="bg-zinc-950 text-white px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-zinc-400 animate-spin" />
-                <span className="text-xs font-black uppercase tracking-wider font-sans">Retro Styling Bot</span>
+                <Sparkles className="h-4 w-4 text-zinc-400 animate-pulse" />
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider font-sans block">Retro Styling AI</span>
+                  <span className="text-[9px] text-zinc-400 font-sans block mt-0.5">
+                    {isAr ? 'مرشد ملابس الشارع • متصل' : 'Streetwear Advisor • Online'}
+                  </span>
+                </div>
               </div>
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping"></span>
             </div>
 
             {/* Chat list */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-zinc-50/50 text-xs">
-              {aiChat.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 leading-relaxed ${
-                    msg.role === 'assistant'
-                      ? 'bg-zinc-200 text-zinc-950 rounded-tl-none mr-auto text-left'
-                      : 'bg-black text-white rounded-tr-none ml-auto text-right'
-                  }`}
-                  style={{ direction: msg.role === 'assistant' ? 'ltr' : 'rtl' }}
-                >
-                  {msg.text}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/50 flex flex-col scrollbar-thin">
+              {aiChat.map((msg, i) => {
+                const isMsgAr = isMessageArabic(msg.text);
+                const isAssistant = msg.role === 'assistant';
+                return (
+                  <div
+                    key={i}
+                    className={`max-w-[85%] rounded-2xl p-3 leading-relaxed shadow-sm transition-all duration-200 ${
+                      isAssistant
+                        ? 'bg-white border border-zinc-200 text-zinc-900 rounded-tl-none self-start'
+                        : 'bg-zinc-950 text-white rounded-tr-none self-end'
+                    }`}
+                    style={{ 
+                      direction: isMsgAr ? 'rtl' : 'ltr',
+                      textAlign: isMsgAr ? 'right' : 'left'
+                    }}
+                  >
+                    {renderFormattedText(msg.text)}
+                  </div>
+                );
+              })}
+              
+              {/* Typing Indicator */}
+              {isAiTyping && (
+                <div className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-400 rounded-2xl rounded-tl-none px-4 py-2.5 mr-auto w-16 self-start shadow-sm">
+                  <span className="h-1.5 w-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="h-1.5 w-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="h-1.5 w-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                 </div>
-              ))}
+              )}
+              
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Quick Suggestions scrollable row */}
+            <div className="px-3 py-2 border-t border-zinc-100 bg-white flex gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+              {isAr ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest('أنا وزني ٧٥ كجم، إيه المقاس المناسب ليا في الهودي؟')}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    👕 مقاسي لوزني
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest('مصاريف الشحن للمحافظات ومدة التوصيل كام؟')}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    📦 أسعار التوصيل
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest('إيه هي خامات ملابس ريترو وهل بتنكمش؟')}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    🔥 خامة القطن والجودة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest('عندكم هوديز وتيشرتات إيه تانية؟ وريني الأسعار')}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    👕 أسعار الكولكشن
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest("My weight is 80kg, what size oversized hoodie should I cop?")}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    👕 Sizing help
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest("How much is shipping to Alexandria and other cities?")}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    📦 Delivery cost
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSuggest("Tell me about the fabric weight and materials used.")}
+                    className="flex-shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10.5px] font-bold px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    🔥 Fabric quality
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSendAiMessage} className="p-2 border-t border-zinc-200 flex bg-white">
+            <form onSubmit={handleSendAiMessage} className="p-2.5 border-t border-zinc-200 flex bg-white">
               <input
                 type="text"
                 value={aiMessage}
                 onChange={(e) => setAiMessage(e.target.value)}
                 placeholder={isAr ? 'اسأل عن خامة القماش، المقاسات...' : 'Ask about fabric weight, sizes...'}
                 className="flex-1 border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black"
+                style={{ direction: isAr ? 'rtl' : 'ltr' }}
               />
               <button
                 type="submit"
-                className="bg-zinc-950 text-white p-2.5 rounded-lg hover:bg-zinc-800 transition-colors ml-1.5"
+                className="bg-zinc-950 text-white p-2.5 rounded-lg hover:bg-zinc-800 transition-colors ml-1.5 flex items-center justify-center"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>

@@ -35,47 +35,31 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         
         {/* Navigation Tabs (Left/Right depending on language) */}
-        <nav className={`hidden md:flex items-center space-x-1 ${isAr ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`} id="desktop-nav">
+        <nav className={`hidden md:flex items-center gap-1.5 p-1 bg-zinc-100 rounded-full border border-zinc-200/50 ${isAr ? 'flex-row-reverse' : 'flex-row'}`} id="desktop-nav">
           <button
             id="nav-btn-shop"
             onClick={() => setCurrentView('shop')}
-            className={`px-4 py-2 text-sm font-semibold tracking-wider transition-colors uppercase ${
+            className={`px-5 py-2 text-xs font-black tracking-widest transition-all rounded-full uppercase flex items-center gap-1.5 ${
               currentView === 'shop'
-                ? 'text-black border-b-2 border-black'
-                : 'text-zinc-500 hover:text-black'
+                ? 'bg-black text-white shadow-md scale-[1.02]'
+                : 'text-zinc-600 hover:text-black hover:bg-zinc-200/50'
             }`}
           >
+            <ShoppingBag className="h-3.5 w-3.5" />
             {isAr ? 'المتجر الرئيسي' : 'Shop'}
           </button>
           
           <button
             id="nav-btn-tracker"
             onClick={() => setCurrentView('tracker')}
-            className={`px-4 py-2 text-sm font-semibold tracking-wider transition-colors uppercase ${
+            className={`px-5 py-2 text-xs font-black tracking-widest transition-all rounded-full uppercase flex items-center gap-1.5 ${
               currentView === 'tracker'
-                ? 'text-black border-b-2 border-black'
-                : 'text-zinc-500 hover:text-black'
+                ? 'bg-black text-white shadow-md scale-[1.02]'
+                : 'text-zinc-600 hover:text-black hover:bg-zinc-200/50'
             }`}
           >
-            <span className="flex items-center gap-1.5">
-              <Truck className="h-4 w-4" />
-              {isAr ? 'تتبع طلبك' : 'Track Order'}
-            </span>
-          </button>
-
-          <button
-            id="nav-btn-admin"
-            onClick={() => setCurrentView('admin')}
-            className={`px-4 py-2 text-sm font-semibold tracking-wider transition-colors uppercase ${
-              currentView === 'admin'
-                ? 'text-rose-600 border-b-2 border-rose-600 font-bold'
-                : 'text-zinc-500 hover:text-zinc-900'
-            }`}
-          >
-            <span className="flex items-center gap-1.5">
-              <ShieldAlert className="h-4 w-4" />
-              {isAr ? 'لوحة التحكم' : 'Admin'}
-            </span>
+            <Truck className="h-3.5 w-3.5" />
+            {isAr ? 'تتبع طلبك' : 'Track Order'}
           </button>
         </nav>
 
@@ -92,25 +76,27 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Controls (Cart, Lang, Admin Status) */}
         <div className={`flex items-center gap-3 sm:gap-4 ${isAr ? 'flex-row-reverse' : 'flex-row'}`} id="header-controls">
-          {/* Mobile Menu Icon Fallback (simple responsive toggler) */}
-          <div className="flex md:hidden gap-1" id="mobile-nav-inline">
+          {/* Mobile Menu inline (Sleek pill-style responsive toggler) */}
+          <div className={`flex md:hidden items-center gap-0.5 p-0.5 bg-zinc-100 rounded-full border border-zinc-200/60 ${isAr ? 'flex-row-reverse' : 'flex-row'}`} id="mobile-nav-inline">
             <button
               onClick={() => setCurrentView('shop')}
-              className={`p-2 text-xs font-bold uppercase border rounded ${currentView === 'shop' ? 'bg-black text-white' : 'bg-transparent text-black'}`}
+              className={`px-3 py-1.5 text-[11px] font-black uppercase rounded-full transition-all ${
+                currentView === 'shop'
+                  ? 'bg-black text-white shadow-sm'
+                  : 'text-zinc-600 hover:text-black'
+              }`}
             >
-              {isAr ? 'متجر' : 'Shop'}
+              {isAr ? 'المتجر' : 'Shop'}
             </button>
             <button
               onClick={() => setCurrentView('tracker')}
-              className={`p-2 text-xs font-bold uppercase border rounded ${currentView === 'tracker' ? 'bg-black text-white' : 'bg-transparent text-black'}`}
+              className={`px-3 py-1.5 text-[11px] font-black uppercase rounded-full transition-all ${
+                currentView === 'tracker'
+                  ? 'bg-black text-white shadow-sm'
+                  : 'text-zinc-600 hover:text-black'
+              }`}
             >
               {isAr ? 'تتبع' : 'Track'}
-            </button>
-            <button
-              onClick={() => setCurrentView('admin')}
-              className={`p-2 text-xs font-bold uppercase border rounded ${currentView === 'admin' ? 'bg-rose-600 text-white border-rose-600' : 'bg-transparent text-zinc-600'}`}
-            >
-              {isAr ? 'إدارة' : 'Admin'}
             </button>
           </div>
 

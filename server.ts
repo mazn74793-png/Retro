@@ -2,16 +2,43 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
+// Initialize Gemini client on the server
+const apiKey = process.env.GEMINI_API_KEY;
+let aiClient: GoogleGenAI | null = null;
+
+if (apiKey) {
+  aiClient = new GoogleGenAI({
+    apiKey: apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
+} else {
+  console.warn("WARNING: GEMINI_API_KEY environment variable is not defined in this environment.");
+}
+
 // Paths for persistent JSON database files
 const DATA_DIR = path.join(process.cwd(), "src", "data");
 const PRODUCTS_FILE = path.join(DATA_DIR, "products_db.json");
 const ORDERS_FILE = path.join(DATA_DIR, "orders_db.json");
+
+// Safe write file sync helper for read-only environments (like Vercel)
+function safeWriteFileSync(filePath: string, content: string) {
+  try {
+    fs.writeFileSync(filePath, content, "utf-8");
+  } catch (error) {
+    console.warn(`[SafeWrite] Skipped writing to file ${filePath}: read-only system or permission denied.`);
+  }
+}
 
 // Default initial products matching src/data/products.ts
 const INITIAL_PRODUCTS = [
@@ -275,18 +302,22 @@ const SEED_ORDERS = [
 
 // Helper to check and bootstrap JSON databases
 function initDatabase() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
 
-  if (!fs.existsSync(PRODUCTS_FILE)) {
-    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(INITIAL_PRODUCTS, null, 2), "utf-8");
-    console.log("Initialized products database file.");
-  }
+    if (!fs.existsSync(PRODUCTS_FILE)) {
+      safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(INITIAL_PRODUCTS, null, 2));
+      console.log("Initialized products database file.");
+    }
 
-  if (!fs.existsSync(ORDERS_FILE)) {
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(SEED_ORDERS, null, 2), "utf-8");
-    console.log("Initialized orders database file.");
+    if (!fs.existsSync(ORDERS_FILE)) {
+      safeWriteFileSync(ORDERS_FILE, JSON.stringify(SEED_ORDERS, null, 2));
+      console.log("Initialized orders database file.");
+    }
+  } catch (error) {
+    console.warn("Database initialization warning (likely read-only on Vercel):", error);
   }
 }
 
@@ -314,7 +345,7 @@ app.post("/api/products", (req, res) => {
     // Add to start of list
     products.unshift(newProduct);
     
-    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2), "utf-8");
+    safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
     res.status(201).json(newProduct);
   } catch (error) {
     res.status(500).json({ error: "Failed to save product" });
@@ -337,7 +368,7 @@ app.patch("/api/products/:id", (req, res) => {
     if (price !== undefined) products[index].price = Number(price);
     if (inStock !== undefined) products[index].inStock = Boolean(inStock);
     
-    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2), "utf-8");
+    safeWriteFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
     res.json(products[index]);
   } catch (error) {
     res.status(500).json({ error: "Failed to update product" });
@@ -382,7 +413,7 @@ app.post("/api/orders", (req, res) => {
     // Add to start of list
     orders.unshift(newOrder);
     
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), "utf-8");
+    safeWriteFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
     res.status(201).json(newOrder);
   } catch (error) {
     res.status(500).json({ error: "Failed to place order" });
@@ -426,10 +457,115 @@ app.patch("/api/orders/:id/status", (req, res) => {
     
     orders[index] = order;
     
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), "utf-8");
+    safeWriteFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
     res.json(order);
   } catch (error) {
     res.status(500).json({ error: "Failed to update order status" });
+  }
+});
+
+// Real-time AI Styling & Logistics Assistant Route
+app.post("/api/ai/chat", async (req, res) => {
+  try {
+    const { message, history } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    if (!aiClient) {
+      // Fallback response generator if API key is not yet configured
+      const isArabic = /[\u0600-\u06FF]/.test(message);
+      let fallbackText = "";
+      if (isArabic) {
+        if (message.includes("مقاس") || message.includes("حجم") || message.includes("سعر")) {
+          fallbackText = "المقاسات عندنا مريحة وأوفرسايز (Oversized) لتمنحك الراحة الكاملة والمظهر العصري لملابس الشارع. للوزن من ٥٥-٧٠ كجم نوصي بـ M، ولـ ٧٠-٨٥ كجم بـ L، ولـ ٨٥-١٠٠ كجم بـ XL، وأكثر من ١٠٠ كجم بـ XXL. الأسعار معروضة بكل قطعة وتبدأ من ٦٥٠ جنيه مصري يا غالي!";
+        } else if (message.includes("توصيل") || message.includes("شحن") || message.includes("دليفري")) {
+          fallbackText = "الشحن بيوصلك خلال ٢-٣ أيام عمل للقاهرة والجيزة (تكلفة الشحن ٥٠ ج.م فقط)، و٣-٤ أيام عمل للإسكندرية والمحافظات الأخرى. تقدر تتابع خط سير شحنتك لحظة بلحظة من صفحة التتبع بالرقم الخاص بك!";
+        } else if (message.includes("خامة") || message.includes("قطن") || message.includes("قماش")) {
+          fallbackText = "إحنا بنستخدم أفضل خامات القطن المصري الفاخر ذو الوزن الثقيل (Heavyweight). الهوديز معمولة من قطن فرينش تيري ٤٠٠ جرام مبطن بفليس فائق النعومة، والتيشرتات من قطن سينجل جيرسي ٢٦٠ جرام لضمان المتانة والشياكة! وجميع القطع معالجة مسبقاً ضد الانكماش.";
+        } else {
+          fallbackText = "يا هلا بيك في ريترو إيجيبت! 🚀 ملابسنا مصممة خصيصاً لتكسر جميع قواعد الموضة التقليدية وتناسب ذوقك الفريد. هل تحب أساعدك في اختيار مقاس قطعة معينة، أو عندك استفسار عن طرق الدفع والشحن؟";
+        }
+      } else {
+        if (message.toLowerCase().includes("size") || message.toLowerCase().includes("fit") || message.toLowerCase().includes("price")) {
+          fallbackText = "Our fits are Oversized & Boxy for that perfect streetwear silhouette! M fits 55-70kg, L fits 70-85kg, XL fits 85-100kg, XXL fits 100-120kg. Retail prices start from 650 EGP!";
+        } else if (message.toLowerCase().includes("delivery") || message.toLowerCase().includes("shipping") || message.toLowerCase().includes("ship")) {
+          fallbackText = "Fast delivery takes just 2-3 business days for Cairo & Giza (50 EGP) and 3-4 days to Alexandria and other Governorates. Track your parcel anytime on the Order Tracker screen!";
+        } else if (message.toLowerCase().includes("material") || message.toLowerCase().includes("fabric") || message.toLowerCase().includes("cotton")) {
+          fallbackText = "We use ultra-premium heavyweight Egyptian cotton (400 GSM brushed fleece for hoodies and 260 GSM single jersey for tees). Pre-shrunk and built to last.";
+        } else {
+          fallbackText = "Welcome to RETRO! 🚀 We design premium oversized streetwear to break boundaries. How can I assist you today? Sizing, tracking, or fabric choices?";
+        }
+      }
+      return res.json({ text: fallbackText });
+    }
+
+    // Map history to standard Gemini chat role objects
+    const contents: any[] = [];
+    if (history && Array.isArray(history)) {
+      history.forEach((h: any) => {
+        contents.push({
+          role: h.role === "user" ? "user" : "model",
+          parts: [{ text: h.text }]
+        });
+      });
+    }
+
+    // Append user's current message
+    contents.push({
+      role: "user",
+      parts: [{ text: message }]
+    });
+
+    const systemInstruction = `
+You are the official RETRO EG Streetwear styling & logistics virtual assistant.
+RETRO EG is a high-fashion, premium, ultra-modern oversized streetwear brand based in Egypt.
+All of our garments are proudly made in Egypt using the finest heavy Egyptian cotton.
+
+Here is your detailed product and operational knowledge:
+1. PRODUCTS IN STOCK:
+   - "RETRO COSMIC OVERSIZED HOODIE" (هودي ريترو كوزميك أوفرسايز): Price is 1250 EGP (original 1650 EGP). Heavyweight 400 GSM French Terry brushed fleece with retro orbit and star graphics. Colors: Carbon Black, Charcoal Grey, Off-White.
+   - "RETRO ORBIT ACID-WASH TEE" (تيشرت ريترو أوربت أسيد-واش): Price is 650 EGP (original 850 EGP). Heavyweight 260 GSM single jersey cotton with 90s orbit-spark print and vintage acid wash finish. Colors: Acid Black, Acid Grey.
+   - "TECH-RETRO CARGO PANTS" (بنطلون كارجو تيك-ريترو): Price is 1100 EGP (original 1450 EGP). Heavy premium cotton twill with contrast white stitching, 6 utility pockets, and adjustable ankle toggles. Colors: Utility Black, Sage Green, Desert Sand.
+   - "VINTAGE WINDBREAKER BOMBER" (جاكيت ويندبريكر بومبر كلاسيكي): Price is 1450 EGP (original 1950 EGP). Premium lightweight crinkled nylon taslan, water-resistant, windproof, with comfortable mesh lining. Colors: Eclipse Black/Grey, Retro Teal/Navy.
+
+2. SIZING GUIDELINES (All garments are designed with a relaxed, modern boxy, Oversized streetwear fit):
+   - M: fits 55 to 70 kg (width 60cm)
+   - L: fits 70 to 85 kg (width 63cm)
+   - XL: fits 85 to 100 kg (width 66cm)
+   - XXL: fits 100 to 120 kg (width 70cm)
+   Recommend sizes confidently based on the customer's weight!
+
+3. SHIPPING & LOGISTICS (Cash on Delivery / الدفع عند الاستلام is our standard):
+   - Cairo & Giza (القاهرة والجيزة): 50 EGP shipping fee, delivery in 2-3 business days.
+   - Alexandria (الإسكندرية): 75 EGP shipping fee, delivery in 3-4 business days.
+   - Other Governorates (المحافظات الأخرى): Delta, Canal, Qalyubia (65-80 EGP), Upper Egypt (95-140 EGP).
+   - Customers can track their orders in the "Order Logistics / تتبع طلبك" tab of the navbar using their custom order ID (e.g. RETRO-102543) which they get upon checkout.
+
+4. BEHAVIOR AND LANGUAGE RULE (CRITICAL):
+   - Always respond in the EXACT same language as the user's latest query!
+   - If the user writes in ARABIC, reply in super stylish, modern, warm, and highly engaging Egyptian Arabic (use Egyptian streetwear slang like "يا باشا", "يا غالي", "صاحبي", "منور", "كولكشن" where appropriate but maintain premium high-end styling authority).
+   - If the user writes in ENGLISH, reply in stylish, modern, enthusiastic street-culture English (using terms like "fam", "drip", "fire silhouette", "heavy weight drape", "oversized streetwear aesthetics").
+   - NEVER start the response in English if the user asked in Arabic, or vice-versa!
+   - Make your answers concise, visual, highly structured, beautifully styled, exciting, and extremely polite.
+   - Give direct styling tips, support color matching (e.g. combining Acid Black Tee with Sage Green Cargo, or Off-White Hoodie with Utility Black Cargo), and encourage them to cop their favorite piece before it sells out!
+`;
+
+    const response = await aiClient.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: contents,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.75,
+      }
+    });
+
+    const replyText = response.text || "I'm here to help with your street style questions!";
+    res.json({ text: replyText });
+
+  } catch (error: any) {
+    console.error("Gemini API Error in backend:", error);
+    res.status(500).json({ error: "Failed to generate response from Gemini" });
   }
 });
 
@@ -455,4 +591,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
